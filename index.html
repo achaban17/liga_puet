@@ -606,7 +606,10 @@ function sheetUser(u){
  let inst='';try{inst=(S.insts&&S.insts[u.inst]&&S.insts[u.inst].name)||((typeof INST!=='undefined'&&INST[u.inst])?INST[u.inst].name:'')||u.inst||'';}catch(_){}
  return{user_id:u.id,ПІБ:u.name,телефон:u.phone,email:u.email,роль:(ROLES[u.role]||{}).label||u.role,заклад:inst,клас:u.grade||'',курс:u.course||'',група:u.group||'',програма:u.program||'',посада:u.position||''};
 }
+let SHEET_MUTE=false;
 function sendToSheet(type,data){
+ if(SHEET_MUTE)return;
+ if(/@liga\.puet$/i.test(String((data&&data.email)||'')))return;/* демо-акаунти не йдуть у таблицю */
  try{
   const body=JSON.stringify(Object.assign({'Подія':type,'Версія':'liga-2026'},data));
   /* text/plain + no-cors: без preflight, відповіді не читаємо */
@@ -1150,7 +1153,10 @@ function simulateProba(u,bias){
 function simulateWeek(u,prog,bias){const steps=PM.WEEK_POOL[prog].steps,p={kind:'week',prog,step:0,picks:[],optOrders:{},done:false};steps.forEach((st,i)=>{const good=st.opts.find(o=>o.quality===3);p.picks[i]=(Math.random()<(bias||.5)&&good?good:st.opts[pbRand(st.opts.length)]).k;});return finishWeek(u,p);}
 function ensureDemoProba(){
  if(!PM||S.demoProbaSeeded)return;S.demoProbaSeeded=true;
+ SHEET_MUTE=true;
+ try{
  S.users.filter(u=>(u.role==='pupil'||u.role==='college')&&/^s\d+$/.test(u.id)).forEach((u,i)=>{if(i%4===3)return;const n=1+(i%3);for(let k=0;k<n;k++)simulateProba(u,.4+(i%5)*.12);if(LEVELS[levelOf(u)].weeks&&i%2===0){const r=latestRun(u);simulateWeek(u,r.top,.6);}});
+ }finally{SHEET_MUTE=false;}
  save();
 }
 function resolveCandidates(p){
