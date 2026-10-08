@@ -599,6 +599,20 @@ tr.mine td{background:var(--accent-soft)}
 <script src="modules/vstup.js"></script>
 <script>
 'use strict';
+/* ========= ВІДПРАВКА В GOOGLE ТАБЛИЦЮ ========= */
+const SHEET_URL='https://script.google.com/macros/s/AKfycbwPFIRLdzhJoHvCSK95z7q75FaV8JERIXQhXphfHsXttMeG2sy0lBgymOujm7NngkVcVA/exec';
+function sheetUser(u){
+ if(!u)return{};
+ let inst='';try{inst=(S.insts&&S.insts[u.inst]&&S.insts[u.inst].name)||((typeof INST!=='undefined'&&INST[u.inst])?INST[u.inst].name:'')||u.inst||'';}catch(_){}
+ return{user_id:u.id,ПІБ:u.name,телефон:u.phone,email:u.email,роль:(ROLES[u.role]||{}).label||u.role,заклад:inst,клас:u.grade||'',курс:u.course||'',група:u.group||'',програма:u.program||'',посада:u.position||''};
+}
+function sendToSheet(type,data){
+ try{
+  const body=JSON.stringify(Object.assign({'Подія':type,'Версія':'liga-2026'},data));
+  /* text/plain + no-cors: без preflight, відповіді не читаємо */
+  fetch(SHEET_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,keepalive:true}).catch(function(){});
+ }catch(e){}
+}
 /* ========= ДОВІДНИКИ ========= */
 const ROLES={
  pupil:{label:'Школяр',desc:'8–11 клас',code:null},
@@ -1183,7 +1197,9 @@ function finishProba(u,p){
  const rec={at:today(),content:typeof PROBA_CONTENT_VERSION!=='undefined'?PROBA_CONTENT_VERSION:'proba',level:p.level,base:p.base,field:p.field,visit:p.visit,
   forkL1:p.forkL1.slice(),forkL2:p.forkL2.slice(),groupRanked:p.groupRanked,famRanked:p.famRanked,quartet:p.quartet.slice(),srcs:p.srcs,A:p.A.slice(),A2:p.A2.slice(),B:p.B.slice(),day:p.day,deepProg:p.deepProg,deepSrc:p.deepSrc,deep:p.deep.slice(),
   top:r.top,second:r.second,ranked:r.ranked,score:r.score,clarity:r.clarity,qLevel:r.qLevel,quality:r.quality,qualityMax:r.qualityMax,deepQuality:r.deepQuality,deepMax:r.deepMax,deepDelta:r.deepDelta,pullTop:r.pullTop,dayMatchesPull:r.dayMatchesPull};
- m.runs.push(rec);p.done=true;p.result=rec;return rec;
+ m.runs.push(rec);p.done=true;p.result=rec;
+ sendToSheet('Проба професії',Object.assign(sheetUser(u),{дата:rec.at,рівень:rec.level,візит:rec.visit,перший_напрям:rec.top,другий_напрям:rec.second,бал_з_20:rec.score,чіткість:rec.clarity,якість:rec.quality,якість_макс:rec.qualityMax,день_обраний:rec.day||'',поглиблення:rec.deepProg||'',вибір_чотирьох_днів:(rec.B||[]).join(', '),відповіді_json:JSON.stringify({forkL1:rec.forkL1,forkL2:rec.forkL2,A:rec.A,A2:rec.A2,B:rec.B,deep:rec.deep})}));
+ return rec;
 }
 /* --- тиждень за програмою ------------------------------------------------ */
 function startWeek(u,prog){S.play={kind:'week',prog,step:0,picks:[],optOrders:{},done:false,intro:true};S.tab='play';}
@@ -1193,7 +1209,9 @@ function finishWeek(u,p){
  m.weekRuns[r.prog]=(m.weekRuns[r.prog]||0)+1;if(!m.weekBest[r.prog]||r.quality>m.weekBest[r.prog])m.weekBest[r.prog]=r.quality;
  m.seen[r.prog]=(m.seen[r.prog]||0)+1;m.famSeen[PP[r.prog].fam]=(m.famSeen[PP[r.prog].fam]||0)+1;
  const rec={at:today(),content:typeof PROBA_CONTENT_VERSION!=='undefined'?PROBA_CONTENT_VERSION:'proba',prog:r.prog,picks:p.picks.slice(),quality:r.quality,max:r.max,level:r.level,best:r.best,weakest:r.weakest,strongSteps:r.strongSteps,costlySteps:r.costlySteps,discRanked:r.discRanked,sum:r.sum,cnt:r.cnt,even:r.even};
- m.weeks.push(rec);p.done=true;p.result=rec;return rec;
+ m.weeks.push(rec);p.done=true;p.result=rec;
+ sendToSheet('Тиждень за програмою',Object.assign(sheetUser(u),{дата:rec.at,програма:(PP[rec.prog]||{}).name||rec.prog,бал_з_27:rec.quality,макс:rec.max,рівень:rec.level,найсильніший_крок:rec.best,найслабший_крок:rec.weakest,вибори:(rec.picks||[]).join(', ')}));
+ return rec;
 }
 function weekNext(m,prog){
  const fam=PP[prog].fam,out=[];const mates=PM.progsOf(fam).filter(x=>x!==prog).sort((a,b)=>(m.weekRuns[a]||0)-(m.weekRuns[b]||0));if(mates.length)out.push(mates[0]);
@@ -1731,7 +1749,7 @@ function subjCheck(){const sp=S.sp,T=subjT(),st=T.steps[sp.i],c=sp.cur;if(!c||c.
   if(st.check){const m=st.check(sp.S,v);if(m){S.msg=m;return;}}
   c.before=subjMeters(T,sp.S);const sc=st.score(sp.S,v);st.eff(sp.S,v);c.fb=sc.fb;c.v=v;subjDone(sc.p,st.fields.map(f=>f.label+' — '+PN(v[f.k])).join('; '));}}
 function subjFinish(){const sp=S.sp,u=me(),D=SUBJ_DATA[sp.k](),T=subjT();const fin=T.finish(sp.S),pts=sp.hist.reduce((a,b)=>a+b.p,0),max=sp.hist.length*2,pct=Math.round((pts+fin.level*3)/(max+6)*100);
- const rec=subjTopicRec(u,sp.k,sp.id);rec.runs.push({at:today(),ver:D.ver,grade:u.grade||null,pct,level:fin.level,min:Math.max(1,Math.round((Date.now()-(sp.t0||Date.now()))/60000)),state:subjMeters(T,sp.S),pts,max,m0:sp.m0,fin:{level:fin.level,title:fin.title,text:fin.text},hist:sp.hist.map(h=>({...h}))});if(rec.best==null||pct>rec.best)rec.best=pct;sp.done={pct,pts,max,fin};sp.cur=null;}
+ const rec=subjTopicRec(u,sp.k,sp.id);rec.runs.push({at:today(),ver:D.ver,grade:u.grade||null,pct,level:fin.level,min:Math.max(1,Math.round((Date.now()-(sp.t0||Date.now()))/60000)),state:subjMeters(T,sp.S),pts,max,m0:sp.m0,fin:{level:fin.level,title:fin.title,text:fin.text},hist:sp.hist.map(h=>({...h}))});if(rec.best==null||pct>rec.best)rec.best=pct;sendToSheet('Предметна тема',Object.assign(sheetUser(u),{дата:today(),предмет:sp.k,тема_id:sp.id,тема:T.title,відсоток:pct,бали:pts,макс:max,рівень_підсумку:fin.level,підсумок:fin.title,хвилин:rec.runs[rec.runs.length-1].min,спроба:rec.runs.length}));sp.done={pct,pts,max,fin};sp.cur=null;}
 function subjProgress(u,k,grade){const D=SUBJ_DATA[k]&&SUBJ_DATA[k]();if(!D)return{done:0,total:0,avg:0};const ts=D.topics.filter(t=>D.sections[t.sec].grade===grade),s=(u.subjects||{})[k],bs=ts.map(t=>s&&s.topics&&s.topics[t.id]?s.topics[t.id].best:null).filter(x=>x!=null);return{done:bs.length,total:ts.length,avg:bs.length?Math.round(bs.reduce((a,b)=>a+b,0)/bs.length):0};}
 function subjMeterBar(T,St,before){return `<div class="sp-meters">${T.meters.map(m=>{const v=St[m.k],d=before?v-before[m.k]:0;return `<div class="sp-m"><span>${ic(meterIcon(m))}${esc(m.label)}</span><b>${PN(v)} <small>${esc(m.unit==='балів'?PW(v,'бал','бали','балів'):(m.unit||''))}</small></b>${d?`<i class="${d>0?'up':'dn'}">${d>0?'+':'−'}${PN(Math.abs(d))}</i>`:''}</div>`;}).join('')}</div>`;}
 function subjPlayView(){
@@ -1841,7 +1859,7 @@ async function register(){
  else if(r.role==='student'){u.inst='puet';u.program=r.program;u.course=+r.course;u.group=(r.group||'').trim();}
  else if(r.role==='school_staff')u.position=r.position;
  else u.inst='puet';
- S.users.push(u);S.me=u.id;S.view='app';S.tab='home';S.err='';Object.assign(r,{name:'',phone:'',email:'',pw:'',pw2:'',gnote:'',code:'',region:'',city:'',instId:'',instName:'',q:{region:'',city:'',inst:''},open:''});S.msg='Профіль створено. '+(u.role==='pupil'||u.role==='college'?'Починайте з туру напрямами.':'');
+ S.users.push(u);sendToSheet('Реєстрація',Object.assign(sheetUser(u),{область:r.region||'',місто:r.city||'',тип_закладу:needInst?(ITYPES[r.itype]||{}).label||'':'',напрям_коледж:u.field||''}));S.me=u.id;S.view='app';S.tab='home';S.err='';Object.assign(r,{name:'',phone:'',email:'',pw:'',pw2:'',gnote:'',code:'',region:'',city:'',instId:'',instName:'',q:{region:'',city:'',inst:''},open:''});S.msg='Профіль створено. '+(u.role==='pupil'||u.role==='college'?'Починайте з туру напрямами.':'');
 }
 async function signIn(){
  const u=findUser(S.auth.login);
